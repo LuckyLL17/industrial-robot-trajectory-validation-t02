@@ -29,3 +29,15 @@ npm run dev
 - 轨迹 release、执行遥测和安全审计
 
 扩展接口：`/api/calibrations`、`/api/frames`、`/api/dynamic-obstacles`、`/api/paths/:id/release`、`/api/executions/:id/telemetry`。
+
+## 优化候选选择—新版本—规划闭环
+
+优化接口保持只读，候选选择形成可追溯版本，重新校验通过后才能规划：
+
+1. `POST /api/paths/:id/optimize`（只读）：登记一次优化会话（run），返回多个速度/blend 候选及 `runId`，不修改原路径、不建版、不规划。
+2. `GET /api/paths/:id/candidates` / `GET /api/optimize-runs/:runId`：查看会话候选、可行性、校验指标与采用状态。
+3. `POST /api/optimize-runs/:runId/adopt`：选择候选。原路径保留为同 family 的基线（baseline），被选候选生成版本号递增的新版本（adopted-candidate），记录 runId/candidateId/来源版本等追溯信息。选择时会重新校验候选快照；新版本处于 draft，需再次 `validate` 通过后才能 `plan`。
+4. `POST /api/paths/:newVersionId/validate` → `POST /api/paths/:newVersionId/plan`：仅对已校验版本规划，不影响基线。
+5. `GET /api/paths/:id/compare`：区分 `baseline`、`candidate`（候选，含 adopted 标记）与 `adoptedVersions`（采用版本，含校验与规划情况）。
+
+失败处置：无可行候选（`best=null`、run 状态 `no-feasible-candidate`）、候选重新校验失效（`candidate-stale`）或重复选择（`409 alreadyAdopted`）均不覆盖基线、不重复建版、不生成规划；重复选择返回已采用版本信息以便恢复。
